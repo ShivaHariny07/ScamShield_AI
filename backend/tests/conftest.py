@@ -42,3 +42,22 @@ def db_session(db_engine):
         session.close()
         outer.rollback()
         connection.close()
+
+
+@pytest.fixture
+def client(db_session):
+    """API client whose requests all use the rolled-back test session.
+
+    Service-level commit() only releases a SAVEPOINT, so nothing persists.
+    """
+    from fastapi.testclient import TestClient
+
+    from app.db.session import get_db
+    from app.main import app
+
+    app.dependency_overrides[get_db] = lambda: db_session
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.pop(get_db, None)

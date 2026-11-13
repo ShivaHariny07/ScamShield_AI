@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     database_name: str
     database_user: str
     database_password: SecretStr
+    # Development default: only the local Vite dev server may call the API.
+    cors_allowed_origins: list[str] = ["http://localhost:5173"]
 
     @property
     def database_url(self) -> URL:
