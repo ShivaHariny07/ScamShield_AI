@@ -6,13 +6,14 @@ identifiers, not credentials. See docs/architecture/security-notes.md.
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.db.session import get_db
+from app.db.session import get_db, get_session_factory
 from app.schemas.investigation import InvestigationCreate, InvestigationRead
 from app.services import investigations as investigation_service
 from app.services.exceptions import InvestigationNotFound
+from app.services.processing import SessionFactory, process_investigation
 
 router = APIRouter(prefix="/investigations", tags=["investigations"])
 
@@ -25,10 +26,18 @@ NOT_FOUND = "Investigation not found."
     status_code=status.HTTP_201_CREATED,
 )
 def create_investigation(
-    payload: InvestigationCreate, db: Session = Depends(get_db)
+    payload: InvestigationCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    session_factory: SessionFactory = Depends(get_session_factory),
 ) -> InvestigationRead:
     investigation = investigation_service.create_investigation(db, payload)
-    return InvestigationRead.model_validate(investigation)
+    response = InvestigationRead.model_validate(investigation)
+    if payload.initial_message is not None:
+        # Only the id and a session factory cross into the background task;
+        # the request session and ORM objects are never passed on.
+        background_tasks.add_task(process_investigation, response.id, session_factory)
+    return response
 
 
 @router.get("/{investigation_id}", response_model=InvestigationRead)

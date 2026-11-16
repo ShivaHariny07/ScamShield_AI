@@ -58,11 +58,16 @@ async function errorFromResponse(response: Response): Promise<ApiError> {
   return new ApiError(GENERIC_ERROR, response.status);
 }
 
+/** True when a request was cancelled on purpose (e.g. component unmounted). */
+export function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
 export async function apiRequest<T>(
   path: string,
-  options: { method?: "GET" | "POST"; body?: unknown } = {},
+  options: { method?: "GET" | "POST"; body?: unknown; signal?: AbortSignal } = {},
 ): Promise<T> {
-  const { method = "GET", body } = options;
+  const { method = "GET", body, signal } = options;
 
   let response: Response;
   try {
@@ -70,8 +75,11 @@ export async function apiRequest<T>(
       method,
       headers: body === undefined ? undefined : { "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
     });
-  } catch {
+  } catch (error) {
+    // A deliberate cancellation is not a network failure; let callers ignore it.
+    if (isAbortError(error)) throw error;
     throw new ApiError(NETWORK_ERROR, null);
   }
 

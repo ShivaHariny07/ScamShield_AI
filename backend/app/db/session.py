@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -21,3 +21,11 @@ def get_db() -> Iterator[Session]:
         yield db
     finally:
         db.close()
+
+
+def get_session_factory() -> Callable[[], Session]:
+    """FastAPI dependency: the factory background tasks use to open their OWN
+    sessions. The request-scoped session from get_db() must never be passed to
+    a background task, because it is closed once the response is sent.
+    """
+    return SessionLocal

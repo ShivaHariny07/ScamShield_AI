@@ -46,6 +46,15 @@ export function createInvestigation(payload: InvestigationCreate): Promise<Inves
   });
 }
 
-export function getInvestigation(id: string): Promise<Investigation> {
-  return apiRequest<Investigation>(`/api/v1/investigations/${encodeURIComponent(id)}`);
+export function getInvestigation(id: string, signal?: AbortSignal): Promise<Investigation> {
+  return apiRequest<Investigation>(`/api/v1/investigations/${encodeURIComponent(id)}`, {
+    signal,
+  });
+}
+
+/** Statuses after which background processing will not change anything. */
+export const TERMINAL_STATUSES: readonly InvestigationStatus[] = ["completed", "failed"];
+
+export function isTerminal(status: InvestigationStatus): boolean {
+  return TERMINAL_STATUSES.includes(status);
 }

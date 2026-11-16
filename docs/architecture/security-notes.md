@@ -46,5 +46,10 @@ Do not expose the API, frontend or database to a network, tunnel or the internet
 - Database errors are logged as metadata only (HTTP method, path, exception
   class, SQLSTATE and constraint name), never exception text or row data.
   The engine also uses `hide_parameters=True`.
+- Background processing failures store only fixed, sanitized messages in
+  `error_message` and log metadata only (investigation id, step, exception
+  class, SQLSTATE). See `background-processing.md`.
+- Logs contain investigation UUIDs. Without authentication a UUID gives access
+  to that investigation, so treat server logs as private.
 - No update or delete endpoints exist; submitted evidence is preserved.
 - The frontend renders submitted text as plain text (no HTML injection).

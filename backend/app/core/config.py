@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL
 
@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     database_password: SecretStr
     # Development default: only the local Vite dev server may call the API.
     cors_allowed_origins: list[str] = ["http://localhost:5173"]
+    # Optional development aid: pause between background processing steps so
+    # progress is visible in the UI. 0 (default) means no artificial delay.
+    processing_step_delay_seconds: float = Field(default=0, ge=0, le=10)
 
     @property
     def database_url(self) -> URL:

@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { ApiError } from "../../api/client";
-import { getInvestigation, type Investigation } from "../../api/investigations";
+import type { Investigation } from "../../api/investigations";
 import ErrorAlert from "../../components/ErrorAlert";
+import ProgressTracker from "./ProgressTracker";
+import { useInvestigationPolling } from "./useInvestigationPolling";
 
 interface InvestigationResultProps {
   investigation: Investigation;
@@ -17,34 +18,34 @@ const STATUS_STYLES: Record<Investigation["status"], string> = {
   failed: "bg-red-100 text-red-900",
 };
 
+const NOT_ASSESSED_NOTE =
+  "Automated analysis is not available yet. This investigation has been recorded but not assessed — do not assume the message is safe.";
+const COMPLETED_NOTE =
+  "Processing finished. Automated scam analysis is not available yet — this message has not been assessed. Do not assume it is safe.";
+const DEFAULT_FAILURE = "Processing failed. Please try again later.";
+
 export default function InvestigationResult({
-  investigation,
+  investigation: initial,
   onUpdated,
   onReset,
 }: InvestigationResultProps) {
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const { investigation, error, polling, refreshing, refresh } = useInvestigationPolling(initial);
+  const [copyError, setCopyError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  async function refresh() {
-    setError(null);
-    setRefreshing(true);
-    try {
-      onUpdated(await getInvestigation(investigation.id));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not refresh the status.");
-    } finally {
-      setRefreshing(false);
-    }
-  }
+  // Keep the parent in sync with the latest polled state.
+  useEffect(() => {
+    if (investigation !== initial) onUpdated(investigation);
+  }, [investigation, initial, onUpdated]);
 
   async function copyId() {
     try {
       await navigator.clipboard.writeText(investigation.id);
+      setCopyError(null);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
-      setError("Could not copy automatically. Please select and copy the ID.");
+      setCopyError("Could not copy automatically. Please select and copy the ID.");
     }
   }
 
@@ -72,12 +73,13 @@ export default function InvestigationResult({
         </div>
         <div>
           <dt className="font-medium text-slate-800">Status</dt>
-          <dd className="mt-1">
+          <dd className="mt-1 flex flex-wrap items-center gap-3">
             <span
               className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${STATUS_STYLES[investigation.status]}`}
             >
               {investigation.status}
             </span>
+            {polling && <span className="text-xs text-slate-500">Updating automatically…</span>}
           </dd>
         </div>
         <div>
@@ -88,12 +90,18 @@ export default function InvestigationResult({
         </div>
       </dl>
 
+      <ProgressTracker investigation={investigation} />
+
+      {investigation.status === "failed" && (
+        <ErrorAlert message={investigation.error_message ?? DEFAULT_FAILURE} />
+      )}
+
       <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        Automated analysis is not available yet. This investigation has been recorded but not
-        assessed — do not assume the message is safe.
+        {investigation.status === "completed" ? COMPLETED_NOTE : NOT_ASSESSED_NOTE}
       </p>
 
       {error && <ErrorAlert message={error} />}
+      {copyError && <ErrorAlert message={copyError} />}
 
       <div className="flex flex-wrap gap-3">
         <button

@@ -44,20 +44,49 @@ def db_session(db_engine):
         connection.close()
 
 
+class RecordingSessionFactory:
+    """Creates NEW Session objects on the rolled-back test connection.
+
+    Used in place of SessionLocal for background tasks. Every created session
+    is recorded so tests can assert it is never the request session.
+    """
+
+    def __init__(self, request_session: Session) -> None:
+        self._connection = request_session.get_bind()
+        self.request_session = request_session
+        self.created: list[Session] = []
+
+    def __call__(self) -> Session:
+        session = Session(
+            bind=self._connection, join_transaction_mode="create_savepoint"
+        )
+        assert session is not self.request_session
+        self.created.append(session)
+        return session
+
+
 @pytest.fixture
-def client(db_session):
+def background_session_factory(db_session):
+    return RecordingSessionFactory(db_session)
+
+
+@pytest.fixture
+def client(db_session, background_session_factory):
     """API client whose requests all use the rolled-back test session.
 
     Service-level commit() only releases a SAVEPOINT, so nothing persists.
     """
     from fastapi.testclient import TestClient
 
-    from app.db.session import get_db
+    from app.db.session import get_db, get_session_factory
     from app.main import app
 
     app.dependency_overrides[get_db] = lambda: db_session
+    # Background tasks get their own separate sessions on the test connection.
+    app.dependency_overrides[get_session_factory] = lambda: background_session_factory
     try:
         with TestClient(app) as test_client:
             yield test_client
     finally:
         app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_session_factory, None)
